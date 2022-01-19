@@ -8,7 +8,6 @@ RUN_CMD = 'cargo run'
 # within them.
 
 SOURCE = 'data/numbers.data'
-
 RESULTS_FILE = 'data/results.data'
 
 # Numbers which hold 32 bits (4 bytes).

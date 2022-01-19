@@ -1,6 +1,6 @@
 # What's the idea?
 
-Frame of Reference is compression method based on relativity between numbers. Assuming that we use as input a stream of data which contains **only** numbers, we can find the minimum value among them and, compute the difference between the rest against the min. So, let's say that we have: 
+Frame of Reference is compression method based on relativity between numbers. Assuming that we use as input an stream of data which contains **only** numbers, we can find the minimum value among them and, compute the difference between the rest against the min. So, let's say that we have:
 
 ```
 20, 13, 100, 42
