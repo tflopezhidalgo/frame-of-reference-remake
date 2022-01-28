@@ -4,7 +4,7 @@ use core::convert::TryInto;
 
 /*
  * Assumpsions
- *  - File is only composed by numbers separated by ','.
+ *  - File is composed only by numbers separated by ','.
  *  - None of the numbers is higher than 255.
  *
  * We want to:
@@ -29,9 +29,7 @@ fn compress(tokens: &Tokens) -> Vec<u8> {
     tokens.iter().map(|t| { (*t).try_into().unwrap() }).collect::<Vec<u8>>()
 }
 
-fn process_tokens(tokens: Tokens) -> Vec<Block> {
-    println!("Tokens = {:?}", tokens);
-
+fn process_chunk(tokens: &Tokens) -> Block {
     let ref_ = find_ref(&tokens);
     let reduced_t = reduce(&ref_, &tokens);
 
@@ -41,7 +39,28 @@ fn process_tokens(tokens: Tokens) -> Vec<Block> {
     println!("Reference = {:?}", ref_);
 
     // For the moment we support only up to 4 bytes.
-    vec![Block { reference: *ref_, block_len: 4, tokens: compressed }]
+    Block { reference: *ref_, block_len: 4, tokens: compressed }
+}
+
+fn process_tokens(tokens: Tokens) -> Vec<Block> {
+    println!("Tokens = {:?}", tokens);
+
+    let mut temp: Tokens = Vec::new();
+    let mut result: Vec<Block> = Vec::new();
+
+    // TODO: Improve
+    // Split byte-stream in chunks and then
+    // compress them.
+
+    for token in tokens {
+        temp.push(token);
+
+        if temp.len() == 4 {
+            result.push(process_chunk(&temp));
+            temp.clear();
+        }
+    }
+    result
 }
 
 fn dump_result(blocks: Vec<Block>) -> () {
