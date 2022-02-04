@@ -1,6 +1,11 @@
-use std::io::Write;
+mod writer;
+
 use std::fs;
+use std::thread;
 use core::convert::TryInto;
+
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 
 /*
  * Assumpsions
@@ -15,7 +20,7 @@ use core::convert::TryInto;
 
 type Number = u32;
 type Tokens = Vec<Number>;
-struct Block { tokens: Vec<u8>, reference: Number, block_len: u8 }
+pub struct Block { tokens: Vec<u8>, reference: Number, block_len: u8 }
 
 fn find_ref(tokens: &Tokens) -> &Number {
     tokens.iter().min().unwrap()
@@ -42,11 +47,10 @@ fn process_chunk(tokens: &Tokens) -> Block {
     Block { reference: *ref_, block_len: 4, tokens: compressed }
 }
 
-fn process_tokens(tokens: Tokens) -> Vec<Block> {
+fn process_tokens(tokens: Tokens, q: Sender<Option<Block>>) -> () {
     println!("Tokens = {:?}", tokens);
 
     let mut temp: Tokens = Vec::new();
-    let mut result: Vec<Block> = Vec::new();
 
     // TODO: Improve
     // Split byte-stream in chunks and then
@@ -56,26 +60,14 @@ fn process_tokens(tokens: Tokens) -> Vec<Block> {
         temp.push(token);
 
         if temp.len() == 4 {
-            result.push(process_chunk(&temp));
+            let block = process_chunk(&temp);
+            q.send(Some(block)).unwrap();
             temp.clear();
         }
     }
-    result
+
+    q.send(None).unwrap();
 }
-
-fn dump_result(blocks: Vec<Block>) -> () {
-    let mut f = fs::File::create("data/results.data").unwrap();
-
-    blocks.iter().for_each(|b| {
-        f.write(&b.reference.to_be_bytes()).unwrap();
-        f.write(&[b.block_len]).unwrap();
-
-        b.tokens.iter().for_each(|t| {
-            f.write(&[*t]).unwrap();
-        });
-    });
-}
-
 
 fn main() {
     let f_bytes: Vec<u8> = fs::read("data/numbers.data").unwrap();
@@ -94,7 +86,15 @@ fn main() {
         }
     }
 
-    let result = process_tokens(tokens);
+    let (tx, rx): (Sender<Option<Block>>, Receiver<Option<Block>>) = mpsc::channel();
 
-    dump_result(result)
+    let mut writer = writer::Writer::new(rx);
+    writer.start();
+
+    let worker_thread = thread::spawn(move || {
+        process_tokens(tokens, tx);
+    });
+
+    worker_thread.join().unwrap();
+    writer.stop();
 }
