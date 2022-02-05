@@ -28,8 +28,7 @@ fn process_chunk(tokens: &Tokens) -> Block {
 
     let compressed = compress(&reduced_t);
 
-    println!("Compressed = {:?}", compressed);
-    println!("Reference = {:?}", ref_);
+    println!("using as reference = {:?}, compressed = {:?}", ref_, compressed);
 
     // For the moment we support only up to 4 bytes.
     Block { reference: *ref_, block_len: 4, tokens: compressed }
