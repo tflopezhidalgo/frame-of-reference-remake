@@ -4,63 +4,61 @@ use std::fs;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
+use std::collections::HashSet;
 
-static OUTPUT_FILE: &str = "data/results.data";
+
+fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
+    file.write(&block.reference.to_be_bytes()).unwrap();
+    file.write(&[block.block_len]).unwrap();
+
+    block.tokens.iter().for_each(|t| {
+        file.write(&[*t]).unwrap();
+    });
+}
+
 
 pub struct Writer {
-    rxs: Vec<Arc<Mutex<Receiver<Option<Block>>>>>,
+    // Channels where blocks to be written are going to come from
+    rx_channels: Vec<Arc<Mutex<Receiver<Option<Block>>>>>,
+
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
-impl Writer {
+impl<'a> Writer {
+    const OUTPUT_FILE: &'a str = "data/results.data";
 
-    pub fn new(rx: Vec<Receiver<Option<Block>>>) -> Writer {
-        let mut _rx = Vec::new();
+    pub fn new(rx_channels: Vec<Receiver<Option<Block>>>) -> Writer {
+        let mut _rx_channels = Vec::new();
 
-        for x in rx {
-            _rx.push(Arc::new(Mutex::new(x)));
+        for ch in rx_channels {
+            _rx_channels.push(Arc::new(Mutex::new(ch)));
         }
 
-        Writer { rxs: _rx, thread: None }
+        Writer { rx_channels: _rx_channels, thread: None }
     }
 
     pub fn start(&mut self) -> () {
-        let rxs = self.rxs.clone();
+        let rx_channels = self.rx_channels.clone();
 
         self.thread = Some(std::thread::spawn(move || {
-            let mut f = fs::File::create(OUTPUT_FILE).unwrap();
-            let mut skipped_queues: Vec<u32> = Vec::new();
+            let mut f = fs::File::create(Writer::OUTPUT_FILE).unwrap();
+            let mut skipped_idxs: HashSet<usize> = HashSet::new();
 
-            loop {
-                if skipped_queues.len() == 2 {
-                    break;
-                }
-
-                let mut current_idx = 0;
-
-                for rx in &rxs {
-                    if skipped_queues.contains(&current_idx) {
-                        current_idx = current_idx + 1;
+            while skipped_idxs.len() != rx_channels.len() {
+                for i in 0..rx_channels.len() {
+                    if skipped_idxs.contains(&i) {
+                        // Channel was closed.
                         continue;
                     }
 
-                    let b = (*rx).lock().unwrap().recv().unwrap();
+                    let ch = &rx_channels[i];
 
-                    if b.is_none() {
-                        // TODO index
-                        skipped_queues.push(current_idx);
-                        current_idx = current_idx + 1;
-                        continue;
+                    if let Some(b) = (*ch).lock().unwrap().recv().unwrap() {
+                        dump_block_into_file(b, &mut f);
+                    } else {
+                        // Channel was closed.
+                        skipped_idxs.insert(i);
                     }
-
-                    f.write(&b.as_ref().unwrap().reference.to_be_bytes()).unwrap();
-                    f.write(&[b.as_ref().unwrap().block_len]).unwrap();
-
-                    b.unwrap().tokens.iter().for_each(|t| {
-                        f.write(&[*t]).unwrap();
-                    });
-
-                    current_idx = current_idx + 1;
                 }
             }
         }))
