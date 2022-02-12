@@ -19,6 +19,12 @@ static CONCURRENCY: u8 = 2;
  *  - Dettach reading steps from writing steps (through a queue).
  *  - Do bulk reading.
  *  - Take a block of 4 numbers, compress them in a u8 vector and write them to file.
+ *
+ *
+ *  TBD:
+ *  Idea: try to build 4-byte blocks and if it won't work
+ *  start to iterate (size --) over block sizes until we find
+ *  the one which gives us an entire number of chunks.
  */
 
 pub type Number = u32;
@@ -26,7 +32,7 @@ pub type Tokens = Vec<Number>;
 
 
 // Represents a compressed set of Numbers
-pub struct Block { tokens: Vec<u8>, reference: Number, block_len: u8 }
+pub struct Block { tokens: Vec<u8>, reference: Number, block_size: u8 }
 
 
 fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> () {

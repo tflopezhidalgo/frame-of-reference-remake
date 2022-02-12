@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
     file.write(&block.reference.to_be_bytes()).unwrap();
-    file.write(&[block.block_len]).unwrap();
+    file.write(&[block.block_size]).unwrap();
 
     block.tokens.iter().for_each(|t| {
         file.write(&[*t]).unwrap();
@@ -43,6 +43,9 @@ impl<'a> Writer {
         self.thread = Some(std::thread::spawn(move || {
             let mut f = fs::File::create(Writer::OUTPUT_FILE).unwrap();
             let mut skipped_idxs: HashSet<usize> = HashSet::new();
+
+            // Numbers within a chunk. Let's keep it in 4
+            f.write(&[0x04]).unwrap();
 
             while skipped_idxs.len() != rx_channels.len() {
                 for i in 0..rx_channels.len() {

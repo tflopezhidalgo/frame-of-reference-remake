@@ -18,20 +18,55 @@ fn reduce(ref_: &Number, tokens: &Tokens) -> Tokens {
     tokens.iter().map(|t| *t - ref_).collect::<Tokens>()
 }
 
-fn compress(tokens: &Tokens) -> Vec<u8> {
-    tokens.iter().map(|t| { (*t).try_into().unwrap() }).collect::<Vec<u8>>()
+fn get_bytes_needed(token: &u32) -> u8 {
+    let mut base_mask: u32 = u32::from_be_bytes([0xFF, 0xFF, 0xFF, 0xFF]);
+
+    let mut bytes = 0;
+
+    while (token & base_mask) != 0 {
+        // add one zero on the right side
+        base_mask = base_mask << 8;
+        bytes += 1;
+    }
+
+    return bytes;
+}
+
+fn compress(bytes_per_token: u8, tokens: &Tokens) -> Vec<u8> {
+    let mut result: Vec<u8> = Vec::new();
+
+    for t in tokens.iter() {
+        let a = t.to_be_bytes().clone();
+
+        for i in 0..bytes_per_token {
+            let value = a[a.len() - 1 - i as usize];
+            result.push(value);
+        }
+    }
+
+    println!("result = {:?}", result);
+
+    result
 }
 
 fn process_chunk(tokens: &Tokens) -> Block {
     let ref_ = find_ref(&tokens);
     let reduced_t = reduce(&ref_, &tokens);
 
-    let compressed = compress(&reduced_t);
+    // let's find out how many bytes
+    // are needed for representing the max
+    // value within tokens.
+    let max_token = tokens.iter().max();
+    let block_size = get_bytes_needed(max_token.unwrap());
+
+    println!("Block size = {:?}", block_size);
+
+    let compressed = compress(block_size, &reduced_t);
 
     println!("using as reference = {:?}, compressed = {:?}", ref_, compressed);
 
     // For the moment we support only up to 4 bytes.
-    Block { reference: *ref_, block_len: 4, tokens: compressed }
+    Block { reference: *ref_, block_size, tokens: compressed }
 }
 
 impl ChunkCompressor {
