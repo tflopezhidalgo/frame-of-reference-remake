@@ -28,26 +28,34 @@ pub type Tokens = Vec<Number>;
 // Represents a compressed set of Numbers
 pub struct Block { tokens: Vec<u8>, reference: Number, block_len: u8 }
 
-fn queue_chunks(tokens: Tokens, q: Vec<Sender<Option<Tokens>>>) -> () {
+
+fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> () {
     let mut temp: Tokens = Vec::new();
 
     // TODO: Improve
-    // Split byte-stream in chunks and then
-    // compress them.
+    // Split byte-stream in chunks and compress them.
+
+    let mut current_idx = 0;
 
     for token in tokens {
         temp.push(token);
 
         if temp.len() == 4 {
-            println!("queueing chunk = {:?}", temp);
-            q[0].send(Some(temp.clone())).unwrap();
+            let worker_idx = current_idx % worker_queues.len();
+            worker_queues[worker_idx].send(Some(temp.clone())).unwrap();
+
+            println!("Queued chunk = {:?} in worker {:?}", temp, worker_idx);
+
+            current_idx += 1;
             temp.clear();
         }
     }
 
-    q[0].send(None).unwrap();
-    q[1].send(None).unwrap();
+    for q in worker_queues {
+        q.send(None).unwrap();
+    }
 }
+
 
 fn main() {
     let f_bytes: Vec<u8> = fs::read(INPUT_FILE).unwrap();
