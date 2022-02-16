@@ -11,15 +11,10 @@ static INPUT_FILE: &str = "data/numbers.data";
 static CONCURRENCY: u8 = 2;
 
 /*
- * Assumpsions
- *  - File is composed only by numbers separated by ','.
- *  - None of the numbers is higher than 255.
- *
  * We want to:
  *  - Dettach reading steps from writing steps (through a queue).
  *  - Do bulk reading.
  *  - Take a block of 4 numbers, compress them in a u8 vector and write them to file.
- *
  *
  *  TBD:
  *  Idea: try to build 4-byte blocks and if it won't work
@@ -32,6 +27,7 @@ pub type Tokens = Vec<Number>;
 
 
 // Represents a compressed set of Numbers
+#[derive(Debug)]
 pub struct Block { tokens: Vec<u8>, reference: Number, block_size: u8 }
 
 

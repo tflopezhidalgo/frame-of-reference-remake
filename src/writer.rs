@@ -11,6 +11,7 @@ fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
     file.write(&block.reference.to_be_bytes()).unwrap();
     file.write(&[block.block_size]).unwrap();
 
+    // We're implicity using big-endian
     block.tokens.iter().for_each(|t| {
         file.write(&[*t]).unwrap();
     });

@@ -2,7 +2,6 @@ use crate::{Block, Tokens, Number};
 
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
-use core::convert::TryInto;
 
 pub struct ChunkCompressor {
     rx: Arc<Mutex<Receiver<Option<Tokens>>>>,
@@ -39,12 +38,10 @@ fn compress(bytes_per_token: u8, tokens: &Tokens) -> Vec<u8> {
         let a = t.to_be_bytes().clone();
 
         for i in 0..bytes_per_token {
-            let value = a[a.len() - 1 - i as usize];
+            let value = a[a.len() - bytes_per_token as usize + i as usize];
             result.push(value);
         }
     }
-
-    println!("result = {:?}", result);
 
     result
 }
@@ -59,13 +56,8 @@ fn process_chunk(tokens: &Tokens) -> Block {
     let max_token = tokens.iter().max();
     let block_size = get_bytes_needed(max_token.unwrap());
 
-    println!("Block size = {:?}", block_size);
-
     let compressed = compress(block_size, &reduced_t);
 
-    println!("using as reference = {:?}, compressed = {:?}", ref_, compressed);
-
-    // For the moment we support only up to 4 bytes.
     Block { reference: *ref_, block_size, tokens: compressed }
 }
 
