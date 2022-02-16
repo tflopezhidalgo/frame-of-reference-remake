@@ -53,7 +53,7 @@ fn process_chunk(tokens: &Tokens) -> Block {
     // let's find out how many bytes
     // are needed for representing the max
     // value within tokens.
-    let max_token = tokens.iter().max();
+    let max_token = reduced_t.iter().max();
     let block_size = get_bytes_needed(max_token.unwrap());
 
     let compressed = compress(block_size, &reduced_t);
