@@ -1,5 +1,5 @@
 mod writer;
-mod compression;
+mod compressor;
 
 use std::fs;
 use core::convert::TryInto;
@@ -9,6 +9,7 @@ use std::sync::mpsc;
 
 static INPUT_FILE: &str = "data/numbers.data";
 static CONCURRENCY: u8 = 2;
+static CHUNK_SIZE: usize = 4;
 
 /*
  * We want to:
@@ -32,25 +33,15 @@ pub struct Block { tokens: Vec<u8>, reference: Number, block_size: u8 }
 
 
 fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> () {
-    let mut temp: Tokens = Vec::new();
-
-    // TODO: Improve
-    // Split byte-stream in chunks and compress them.
-
     let mut current_idx = 0;
 
-    for token in tokens {
-        temp.push(token);
+    for token in tokens.chunks(CHUNK_SIZE) {
+        let worker_idx = current_idx % worker_queues.len();
+        worker_queues[worker_idx].send(Some(token.to_vec())).unwrap();
 
-        if temp.len() == 4 {
-            let worker_idx = current_idx % worker_queues.len();
-            worker_queues[worker_idx].send(Some(temp.clone())).unwrap();
+        println!("Queued chunk = {:?} in worker {:?}", token, worker_idx);
 
-            println!("Queued chunk = {:?} in worker {:?}", temp, worker_idx);
-
-            current_idx += 1;
-            temp.clear();
-        }
+        current_idx += 1;
     }
 
     for q in worker_queues {
@@ -63,22 +54,15 @@ fn main() {
     let f_bytes: Vec<u8> = fs::read(INPUT_FILE).unwrap();
 
     let mut tokens: Tokens = Vec::new();
-    let mut temp: Vec<u8> = Vec::new();
 
     // Build u32 numbers by grouping u8 ones
     // in groups of size 4 (4 bytes).
 
-    // TODO: improve
-    for b in f_bytes {
-        temp.push(b);
-
-        if temp.len() == 4 {
-            tokens.push(u32::from_be_bytes(temp.clone().try_into().unwrap()));
-            temp.clear();
-        }
+    for temp in f_bytes.chunks(CHUNK_SIZE) {
+        tokens.push(u32::from_be_bytes(temp.try_into().unwrap()));
     }
 
-    let mut compressors: Vec<compression::ChunkCompressor> = Vec::new();
+    let mut compressors: Vec<compressor::Compressor> = Vec::new();
     let mut work_queues: Vec<Sender<Option<Tokens>>> = Vec::new();
     let mut result_queues: Vec<Receiver<Option<Block>>> = Vec::new();
 
@@ -88,7 +72,7 @@ fn main() {
         // we want to keep each worker with its own queue.
         let (block_tx, block_rx): (Sender<Option<Block>>, Receiver<Option<Block>>) = mpsc::channel();
 
-        let mut worker = compression::ChunkCompressor::new(chunk_rx, block_tx);
+        let mut worker = compressor::Compressor::new(chunk_rx, block_tx);
         worker.start();
 
         work_queues.push(chunk_tx);
