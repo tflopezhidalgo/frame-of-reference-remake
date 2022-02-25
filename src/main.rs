@@ -10,6 +10,7 @@ use std::sync::mpsc;
 static INPUT_FILE: &str = "data/numbers.data";
 static CONCURRENCY: u8 = 2;
 static CHUNK_SIZE: usize = 4;
+static U32_SIZE: usize = 4;
 
 /*
  * We want to:
@@ -36,10 +37,11 @@ fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> (
     let mut current_idx = 0;
 
     for token in tokens.chunks(CHUNK_SIZE) {
+        // round robin chunks
         let worker_idx = current_idx % worker_queues.len();
         worker_queues[worker_idx].send(Some(token.to_vec())).unwrap();
 
-        println!("Queued chunk = {:?} in worker {:?}", token, worker_idx);
+        println!("queued chunk = {:?} in worker {:?}", token, worker_idx);
 
         current_idx += 1;
     }
@@ -57,10 +59,9 @@ fn main() {
 
     // Build u32 numbers by grouping u8 ones
     // in groups of size 4 (4 bytes).
-
-    for temp in f_bytes.chunks(CHUNK_SIZE) {
-        tokens.push(u32::from_be_bytes(temp.try_into().unwrap()));
-    }
+    f_bytes.chunks(U32_SIZE).for_each(
+        |u32| tokens.push(u32::from_be_bytes(u32.try_into().unwrap()))
+    );
 
     let mut compressors: Vec<compressor::Compressor> = Vec::new();
     let mut work_queues: Vec<Sender<Option<Tokens>>> = Vec::new();

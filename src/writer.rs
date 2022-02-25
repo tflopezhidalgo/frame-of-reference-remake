@@ -7,17 +7,6 @@ use std::sync::mpsc::Receiver;
 use std::collections::HashSet;
 
 
-fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
-    file.write(&block.reference.to_be_bytes()).unwrap();
-    file.write(&[block.block_size]).unwrap();
-
-    // We're implicity using big-endian
-    block.tokens.iter().for_each(|t| {
-        file.write(&[*t]).unwrap();
-    });
-}
-
-
 pub struct Writer {
     // Channels where blocks to be written are going to come from
     rx_channels: Vec<Arc<Mutex<Receiver<Option<Block>>>>>,
@@ -36,6 +25,16 @@ impl<'a> Writer {
         }
 
         Writer { rx_channels: _rx_channels, thread: None }
+    }
+
+    pub fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
+        file.write(&block.reference.to_be_bytes()).unwrap();
+        file.write(&[block.block_size]).unwrap();
+
+        // We're implicity using big-endian
+        block.tokens.iter().for_each(|t| {
+            file.write(&[*t]).unwrap();
+        });
     }
 
     pub fn start(&mut self) -> () {
@@ -58,7 +57,7 @@ impl<'a> Writer {
                     let ch = &rx_channels[i];
 
                     if let Some(b) = (*ch).lock().unwrap().recv().unwrap() {
-                        dump_block_into_file(b, &mut f);
+                        Writer::dump_block_into_file(b, &mut f);
                     } else {
                         // Channel was closed.
                         skipped_idxs.insert(i);

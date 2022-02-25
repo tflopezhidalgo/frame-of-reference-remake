@@ -1,7 +1,5 @@
 import os
 
-RUN_CMD = 'cargo run'
-
 # Util script mean to be used as a generator
 # of binary numbers. It should reduce the
 # friction of creating binary files with numbers
@@ -10,9 +8,10 @@ RUN_CMD = 'cargo run'
 SOURCE = 'data/numbers.data'
 RESULTS_FILE = 'data/results.data'
 
+RUN_CMD = 'cargo run'
+CLEANUP_CMD = f'rm {SOURCE} && rm {RESULTS_FILE}'
+
 # Numbers which hold 32 bits (4 bytes).
-# For the moment we're using numbers that
-# are not above 255 bits.
 # Also we're using big-endian.
 
 NUMBERS = [
@@ -97,6 +96,8 @@ def main():
         0x00, 0x00, 0x00, 0x01,
         0x00, 0x00, 0x00, 0x02,
     ]))
+
+    os.system(CLEANUP_CMD)
 
 
 if __name__ == '__main__':
