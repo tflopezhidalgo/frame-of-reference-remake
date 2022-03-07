@@ -1,8 +1,7 @@
-use crate::{Block, Tokens, Number};
+use crate::{Block, Number, Tokens};
 
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
-
+use std::sync::{Arc, Mutex};
 
 pub struct Compressor {
     rx: Arc<Mutex<Receiver<Option<Tokens>>>>,
@@ -11,10 +10,11 @@ pub struct Compressor {
 }
 
 impl Compressor {
-
     pub fn new(rx: Receiver<Option<Tokens>>, tx: Sender<Option<Block>>) -> Self {
         Self {
-            thread: None, tx, rx: Arc::new(Mutex::new(rx))
+            thread: None,
+            tx,
+            rx: Arc::new(Mutex::new(rx)),
         }
     }
 
@@ -67,25 +67,27 @@ impl Compressor {
 
         let compressed = Self::compress(block_size, &reduced_t);
 
-        Block { reference: *ref_, block_size, tokens: compressed }
+        Block {
+            reference: *ref_,
+            block_size,
+            tokens: compressed,
+        }
     }
 
     pub fn start(&mut self) {
         let rx = self.rx.clone();
         let tx = self.tx.clone();
 
-        self.thread = Some(std::thread::spawn(move || {
-            loop {
-                let value = (*rx).lock().unwrap().recv().unwrap();
+        self.thread = Some(std::thread::spawn(move || loop {
+            let value = (*rx).lock().unwrap().recv().unwrap();
 
-                if value.is_none() {
-                    tx.send(None).unwrap();
-                    break;
-                }
-
-                let result = Self::process_chunk(&value.unwrap());
-                tx.send(Some(result)).unwrap();
+            if value.is_none() {
+                tx.send(None).unwrap();
+                break;
             }
+
+            let result = Self::process_chunk(&value.unwrap());
+            tx.send(Some(result)).unwrap();
         }));
     }
 

@@ -1,11 +1,10 @@
 use crate::Block;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Receiver;
-use std::collections::HashSet;
-
+use std::sync::{Arc, Mutex};
 
 pub struct Writer {
     // Channels where blocks to be written are going to come from
@@ -24,7 +23,10 @@ impl<'a> Writer {
             _rx_channels.push(Arc::new(Mutex::new(ch)));
         }
 
-        Writer { rx_channels: _rx_channels, thread: None }
+        Writer {
+            rx_channels: _rx_channels,
+            thread: None,
+        }
     }
 
     pub fn dump_block_into_file(block: Block, file: &mut fs::File) -> () {
@@ -71,6 +73,6 @@ impl<'a> Writer {
         match self.thread {
             Some(t) => t.join().unwrap(),
             _ => {}
-         }
+        }
     }
 }
