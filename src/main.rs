@@ -25,27 +25,34 @@ static U32_SIZE: usize = 4;
  */
 
 pub type Number = u32;
-pub type Tokens = Vec<Number>;
+
+pub type RawNumbers = Vec<Number>;
+
+// Represents a set of raw numbers which
+// will be compressed.
+pub type Chunk = Vec<Number>;
+
+pub type Tokens = Vec<u8>;
 
 // Represents a compressed set of Numbers
+// Chunks -> Block
 #[derive(Debug)]
 pub struct Block {
-    tokens: Vec<u8>,
+    tokens: Tokens,
     reference: Number,
     block_size: u8,
 }
 
-fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> () {
+fn spread_chunks(raw_numbers: RawNumbers, worker_queues: Vec<Sender<Option<Chunk>>>) -> () {
     let mut current_idx = 0;
 
-    for token in tokens.chunks(CHUNK_SIZE) {
-        // round robin chunks
+    for c in raw_numbers.chunks(CHUNK_SIZE) {
         let worker_idx = current_idx % worker_queues.len();
         worker_queues[worker_idx]
-            .send(Some(token.to_vec()))
+            .send(Some(c.to_vec()))
             .unwrap();
 
-        println!("queued chunk = {:?} in worker {:?}", token, worker_idx);
+        println!("queued chunk = {:?} in worker {:?}", c, worker_idx);
 
         current_idx += 1;
     }
@@ -58,37 +65,42 @@ fn queue_chunks(tokens: Tokens, worker_queues: Vec<Sender<Option<Tokens>>>) -> (
 fn main() {
     let f_bytes: Vec<u8> = fs::read(INPUT_FILE).unwrap();
 
-    let mut tokens: Tokens = Vec::new();
+    let mut raw_numbers: RawNumbers = Vec::new();
 
-    // Build u32 numbers by grouping u8 ones
-    // in groups of size 4 (4 bytes).
+    // Build u32 numbers by grouping u8 ones in 4-sized groups (4 bytes).
+    // We're assuming 32-bits-size numbers
     f_bytes
         .chunks(U32_SIZE)
-        .for_each(|u32| tokens.push(u32::from_be_bytes(u32.try_into().unwrap())));
+        .for_each(|u32_number| raw_numbers.push(u32::from_be_bytes(u32_number.try_into().unwrap())));
 
     let mut compressors: Vec<compressor::Compressor> = Vec::new();
-    let mut work_queues: Vec<Sender<Option<Tokens>>> = Vec::new();
-    let mut result_queues: Vec<Receiver<Option<Block>>> = Vec::new();
+    let mut chunks_txs: Vec<Sender<Option<Chunk>>> = Vec::new();
+    let mut block_rxs: Vec<Receiver<Option<Block>>> = Vec::new();
 
     for _ in 0..CONCURRENCY {
-        let (chunk_tx, chunk_rx): (Sender<Option<Tokens>>, Receiver<Option<Tokens>>) =
+        let (chunk_tx, chunk_rx): (Sender<Option<Chunk>>, Receiver<Option<Chunk>>) =
             mpsc::channel();
 
         // we want to keep each worker with its own queue.
         let (block_tx, block_rx): (Sender<Option<Block>>, Receiver<Option<Block>>) =
             mpsc::channel();
 
-        let mut worker = compressor::Compressor::new(chunk_rx, block_tx);
-        worker.start();
+        /*
+         * Set to each compressor a channel for:
+         *  - Receiving incoming chunks
+         *  - Queueing after-compression blocks
+         */
+        let mut c = compressor::Compressor::new(chunk_rx, block_tx);
+        c.start();
 
-        work_queues.push(chunk_tx);
-        compressors.push(worker);
-        result_queues.push(block_rx);
+        chunks_txs.push(chunk_tx);
+        compressors.push(c);
+        block_rxs.push(block_rx);
     }
-    let mut writer = writer::Writer::new(result_queues);
+    let mut writer = writer::Writer::new(block_rxs);
     writer.start();
 
-    queue_chunks(tokens, work_queues);
+    spread_chunks(raw_numbers, chunks_txs);
 
     for c in compressors {
         c.stop();

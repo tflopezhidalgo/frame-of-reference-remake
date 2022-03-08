@@ -1,16 +1,16 @@
-use crate::{Block, Number, Tokens};
+use crate::{Block, Number, Tokens, Chunk};
 
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 pub struct Compressor {
-    rx: Arc<Mutex<Receiver<Option<Tokens>>>>,
+    rx: Arc<Mutex<Receiver<Option<Chunk>>>>,
     tx: Sender<Option<Block>>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Compressor {
-    pub fn new(rx: Receiver<Option<Tokens>>, tx: Sender<Option<Block>>) -> Self {
+    pub fn new(rx: Receiver<Option<Chunk>>, tx: Sender<Option<Block>>) -> Self {
         Self {
             thread: None,
             tx,
@@ -18,20 +18,20 @@ impl Compressor {
         }
     }
 
-    fn find_ref(tokens: &Tokens) -> &Number {
-        tokens.iter().min().unwrap()
+    fn find_ref(c: &Chunk) -> &Number {
+        c.iter().min().unwrap()
     }
 
-    fn reduce(ref_: &Number, tokens: &Tokens) -> Tokens {
-        tokens.iter().map(|t| *t - ref_).collect::<Tokens>()
+    fn reduce(ref_: &Number, c: &Chunk) -> Chunk {
+        c.iter().map(|t| *t - ref_).collect::<Chunk>()
     }
 
-    fn get_bytes_needed(token: &u32) -> u8 {
+    fn get_bytes_needed(n: &Number) -> u8 {
         let mut base_mask: u32 = u32::from_be_bytes([0xFF, 0xFF, 0xFF, 0xFF]);
 
         let mut bytes = 0;
 
-        while (token & base_mask) != 0 {
+        while (n & base_mask) != 0 {
             // add one zero on the right side
             base_mask = base_mask << 8;
             bytes += 1;
@@ -40,10 +40,10 @@ impl Compressor {
         return bytes;
     }
 
-    fn compress(bytes_per_token: u8, tokens: &Tokens) -> Vec<u8> {
+    fn compress(bytes_per_token: u8, c: &Chunk) -> Tokens {
         let mut result: Vec<u8> = Vec::new();
 
-        for t in tokens.iter() {
+        for t in c.iter() {
             let a = t.to_be_bytes().clone();
 
             for i in 0..bytes_per_token {
@@ -55,9 +55,9 @@ impl Compressor {
         result
     }
 
-    fn process_chunk(tokens: &Tokens) -> Block {
-        let ref_ = Self::find_ref(&tokens);
-        let reduced_t = Self::reduce(&ref_, &tokens);
+    fn process_chunk(c: &Chunk) -> Block {
+        let ref_ = Self::find_ref(&c);
+        let reduced_t = Self::reduce(&ref_, &c);
 
         // let's find out how many bytes
         // are needed for representing the max
