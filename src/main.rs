@@ -1,11 +1,12 @@
 mod compressor;
 mod writer;
 
-use core::convert::TryInto;
-use std::fs;
+use clap::{App, Arg};
 
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use core::convert::TryInto;
+
+use std::fs;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 static INPUT_FILE: &str = "data/numbers.data";
 static CONCURRENCY: u8 = 2;
@@ -47,9 +48,7 @@ fn spread_chunks(raw_numbers: RawNumbers, worker_queues: Vec<Sender<Option<Chunk
 
     for c in raw_numbers.chunks(CHUNK_SIZE) {
         let worker_idx = current_idx % worker_queues.len();
-        worker_queues[worker_idx]
-            .send(Some(c.to_vec()))
-            .unwrap();
+        worker_queues[worker_idx].send(Some(c.to_vec())).unwrap();
 
         println!("queued chunk = {:?} in worker {:?}", c, worker_idx);
 
@@ -61,49 +60,75 @@ fn spread_chunks(raw_numbers: RawNumbers, worker_queues: Vec<Sender<Option<Chunk
     }
 }
 
-fn main() {
-    let f_bytes: Vec<u8> = fs::read(INPUT_FILE).unwrap();
-
-    let mut raw_numbers: RawNumbers = Vec::new();
-
-    // Build u32 numbers by grouping u8 ones in 4-sized groups (4 bytes).
-    // We're assuming 32-bits-size numbers
-    f_bytes
-        .chunks(U32_SIZE)
-        .for_each(|u32_number| raw_numbers.push(u32::from_be_bytes(u32_number.try_into().unwrap())));
-
-    let mut compressors: Vec<compressor::Compressor> = Vec::new();
-    let mut chunks_txs: Vec<Sender<Option<Chunk>>> = Vec::new();
-    let mut block_rxs: Vec<Receiver<Option<Block>>> = Vec::new();
-
-    for _ in 0..CONCURRENCY {
-        let (chunk_tx, chunk_rx): (Sender<Option<Chunk>>, Receiver<Option<Chunk>>) =
-            mpsc::channel();
-
-        // we want to keep each worker with its own queue.
-        let (block_tx, block_rx): (Sender<Option<Block>>, Receiver<Option<Block>>) =
-            mpsc::channel();
-
-        /*
-         * Set to each compressor a channel for:
-         *  - Receiving incoming chunks
-         *  - Queueing after-compression blocks
-         */
-        let mut c = compressor::Compressor::new(chunk_rx, block_tx);
-        c.start();
-
-        chunks_txs.push(chunk_tx);
-        compressors.push(c);
-        block_rxs.push(block_rx);
+fn raw_numbers_from_file(filename: &str) -> Option<RawNumbers> {
+    match fs::read(filename) {
+        Ok(f_bytes) => {
+            // Build u32 numbers by grouping u8 ones in 4-sized groups (4 bytes).
+            // We're assuming 32-bits-size numbers
+            Some(
+                f_bytes
+                    .chunks(U32_SIZE)
+                    .map(|u32_number| u32::from_be_bytes(u32_number.try_into().unwrap()))
+                    .collect(),
+            )
+        }
+        Err(_) => None,
     }
-    let mut writer = writer::Writer::new(block_rxs);
-    writer.start();
+}
 
-    spread_chunks(raw_numbers, chunks_txs);
+fn run(concurrency: usize, input_filename: &str) {
+    match raw_numbers_from_file(input_filename) {
+        Some(raw_numbers) => {
+            let mut compressors: Vec<compressor::Compressor> = Vec::new();
+            let mut chunks_txs: Vec<Sender<Option<Chunk>>> = Vec::new();
+            let mut block_rxs: Vec<Receiver<Option<Block>>> = Vec::new();
 
-    for c in compressors {
-        c.stop();
+            for _ in 0..concurrency {
+                let (chunk_tx, chunk_rx): (Sender<Option<Chunk>>, Receiver<Option<Chunk>>) = channel();
+
+                // we want to keep each worker with its own queue.
+                let (block_tx, block_rx): (Sender<Option<Block>>, Receiver<Option<Block>>) = channel();
+
+                /*
+                 * Set to each compressor a channel for:
+                 *  - Receiving incoming chunks
+                 *  - Queueing after-compression blocks
+                 */
+                let mut c = compressor::Compressor::new(chunk_rx, block_tx);
+                c.start();
+
+                chunks_txs.push(chunk_tx);
+                compressors.push(c);
+                block_rxs.push(block_rx);
+            }
+            let mut writer = writer::Writer::new(block_rxs);
+            writer.start();
+
+            spread_chunks(raw_numbers, chunks_txs);
+
+            for c in compressors {
+                c.stop();
+            }
+
+            writer.stop();
+        },
+
+        None => { println!("Failed to read file!"); }
     }
+}
 
-    writer.stop();
+fn main() -> () {
+    let matches = App::new("")
+        .arg(Arg::with_name("input").long("input").takes_value(true))
+        .arg(Arg::with_name("concurrency").long("concurrency").takes_value(true))
+        .get_matches();
+
+    let input_file = matches.value_of("input").unwrap_or(INPUT_FILE);
+    let concurrency_str = matches.value_of("concurrency").unwrap_or("1");
+
+    println!("Running with concurrency: {} and input: {}", concurrency_str, input_file);
+    match concurrency_str.parse::<usize>() {
+        Ok(c) => run(c, input_file),
+        Err(_) => run(CONCURRENCY as usize, input_file),
+    }
 }

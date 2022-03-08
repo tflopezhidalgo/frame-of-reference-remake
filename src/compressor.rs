@@ -1,4 +1,4 @@
-use crate::{Block, Number, Tokens, Chunk};
+use crate::{Block, Chunk, Number, Tokens};
 
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
