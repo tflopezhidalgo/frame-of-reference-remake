@@ -25,7 +25,6 @@ static U32_SIZE: usize = 4;
  */
 
 pub type Number = u32;
-
 pub type RawNumbers = Vec<Number>;
 
 // Represents a set of raw numbers which
